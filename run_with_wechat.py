@@ -80,34 +80,55 @@ def _send_wxpusher(spt, title, checkin_line, buddy_line, overall_ok):
         "summary": summary,
         "contentType": 2,
     }
-    code, body = _post_json(WXPUSHER_URL, payload)
-    ok = code == 200 and body.get("code") == 1000
-    reason = "" if ok else "WxPusher HTTP %s，返回 %s" % (code, body)
+    try:
+        code, body = _post_json(WXPUSHER_URL, payload)
+        ok = code == 200 and body.get("code") == 1000
+        reason = "" if ok else "WxPusher HTTP %s，返回 %s" % (code, body)
+    except Exception as e:
+        ok, reason = False, "WxPusher 请求异常：%s: %s" % (type(e).__name__, e)
     print("  [微信] WxPusher %s" % ("发送成功" if ok else reason), flush=True)
     return ok, reason
 
 
 def _send_wecom(webhook, title, checkin_line, buddy_line, overall_ok):
     status_text = "成功" if overall_ok else "部分失败"
+    # 用 text 而不是 markdown：企业微信的 markdown 消息同步到个人微信时会显示
+    # “暂不支持此消息类型”，纯文本才能同时在企业微信和个人微信正常显示。
     content = (
-        "## %s\n"
-        "> 整体：**%s**\n\n"
-        "**签到**\n%s\n\n"
-        "**猫猫旅行**\n%s\n"
+        "%s\n"
+        "整体：%s\n\n"
+        "签到：%s\n\n"
+        "猫猫旅行：%s"
     ) % (title, status_text, checkin_line, buddy_line)
     payload = {
-        "msgtype": "markdown",
-        "markdown": {"content": content},
+        "msgtype": "text",
+        "text": {"content": content},
     }
-    code, body = _post_json(webhook, payload)
-    ok = code == 200 and body.get("errcode") == 0
-    reason = "" if ok else "企业微信 HTTP %s，返回 %s" % (code, body)
+    try:
+        code, body = _post_json(webhook, payload)
+        ok = code == 200 and body.get("errcode") == 0
+        reason = "" if ok else "企业微信 HTTP %s，返回 %s" % (code, body)
+    except Exception as e:
+        ok, reason = False, "企业微信请求异常：%s: %s" % (type(e).__name__, e)
     print("  [微信] 企业微信机器人 %s" % ("发送成功" if ok else reason), flush=True)
     return ok, reason
 
 
 def patched_push(webhook, title, checkin_line, buddy_line, overall_ok):
-    """保持与 wb_auto.push_feishu 相同签名，让原脚本无需改动即可调用。"""
+    """保持与 wb_auto.push_feishu 相同签名，让原脚本无需改动即可调用。
+
+    通道优先级：
+      1. 若设置 NOTIFY_CHANNEL=wecom，强制走企业微信（即使同时存在 WXPUSHER_SPT）
+      2. 否则 WXPUSHER_SPT > WECOM_WEBHOOK > 飞书
+    """
+    channel = (os.environ.get("NOTIFY_CHANNEL") or "").strip().lower()
+
+    if channel in ("wecom", "wechat_work", "qywx"):
+        wecom_webhook = os.environ.get("WECOM_WEBHOOK")
+        if not wecom_webhook:
+            return False, "已指定企业微信通道，但缺少 Secret WECOM_WEBHOOK"
+        return _send_wecom(wecom_webhook, title, checkin_line, buddy_line, overall_ok)
+
     spt = os.environ.get("WXPUSHER_SPT")
     if spt:
         return _send_wxpusher(spt, title, checkin_line, buddy_line, overall_ok)
