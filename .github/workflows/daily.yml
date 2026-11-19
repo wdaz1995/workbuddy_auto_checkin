@@ -47,6 +47,7 @@ jobs:
           FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
           WXPUSHER_SPT: ${{ secrets.WXPUSHER_SPT }}
           WECOM_WEBHOOK: ${{ secrets.WECOM_WEBHOOK }}
+          NOTIFY_CHANNEL: ${{ secrets.NOTIFY_CHANNEL }}
           WB_ENDPOINT: https://copilot.tencent.com
           WB_RESULT_FILE: ${{ runner.temp }}/wb_result.md
         run: |
